@@ -28,38 +28,36 @@ export type EvolutionLink = {
   extra?: string | number | boolean
 }
 
-export type PokemonRaw = {
-  base_stats?: Partial<Record<StatKey, number>>
-  learn_set?: Array<{ level?: number; move?: string }>
-  egg_moves?: string[]
-  evolution_table?: Array<{
-    method?: string
-    parameter?: string | number | boolean
-    target?: string
-    extra?: string | number | boolean
-  }>
-}
-
-export type PokemonDataFile = Record<string, PokemonRaw>
-
 export type PokemonRecord = {
   key: string
+  id: number | null
   displayName: string
+  baseKey: string
   baseStats: BaseStats
   total: number
   learnSet: LearnSetMove[]
   eggMoves: string[]
   evolutionTable: EvolutionStep[]
+  types: string[]
+  spriteSources: string[]
   spriteSlug: string
   baseSlug: string
 }
 
 export type SpritePokemon = Pick<
   PokemonRecord,
-  'key' | 'displayName' | 'spriteSlug' | 'baseSlug'
+  'key' | 'displayName' | 'spriteSlug' | 'baseSlug' | 'spriteSources'
 >
 
-export type PokemonTypeMap = Record<string, string[]>
+export type PokedexCatalogFile = {
+  meta: {
+    schemaVersion: number
+    generatedAt: string
+    sources: Record<string, unknown>
+    counts: Record<string, number>
+  }
+  pokemon: Record<string, PokemonRecord>
+}
 
 export type TypeColor = {
   bg: string

@@ -1,3 +1,4 @@
+import { memo, useCallback, useMemo, useState, useTransition } from "react";
 import { Link } from "@tanstack/react-router";
 import {
 	EMPTY_STATS,
@@ -11,16 +12,16 @@ import type {
 	DefenseMultiplierMap,
 	EvolutionLink,
 	PokemonRecord,
-	PokemonTypeMap,
+	StatKey,
 } from "./types";
 import {
 	describeEvolutionRequirement,
+	formatPokemonId,
 	formatMultiplier,
 	getDefenseMultiplierTone,
 	getDefensiveMatchupLabel,
 	getStatBarGradient,
 	getTypeColor,
-	getTypesForPokemon,
 	toDisplayLabel,
 } from "./utils";
 
@@ -85,8 +86,8 @@ export function PokedexSearchCard({
 							>
 								<PokemonSprite
 									pokemon={pokemon}
-									size={22}
-									className="h-[22px] w-[22px] rounded-full object-contain"
+									size={30}
+									className="h-[30px] w-[30px] object-contain"
 								/>
 								{pokemon.displayName}
 							</button>
@@ -135,21 +136,224 @@ export function ErrorNotice({ message }: ErrorNoticeProps) {
 type PokemonListTableProps = {
 	filteredPokemon: PokemonRecord[];
 	pokemonRecordsCount: number;
-	pokemonTypes: PokemonTypeMap;
 };
+
+type PokemonListSortColumn = "id" | "pokemon" | "bst" | StatKey;
+
+type PokemonListSort = {
+	column: PokemonListSortColumn;
+	direction: "asc" | "desc";
+};
+
+const LIST_STAT_COLUMNS: StatKey[] = [
+	"hp",
+	"attack",
+	"defense",
+	"sp_attack",
+	"sp_defense",
+	"speed",
+];
+
+type PokemonListRowProps = {
+	onOpenPokemon: (pokemonKey: string) => void;
+	pokemon: PokemonRecord;
+};
+
+const PokemonListRow = memo(function PokemonListRow({
+	onOpenPokemon,
+	pokemon,
+}: PokemonListRowProps) {
+	const rowTypes = pokemon.types;
+	const formattedId = formatPokemonId(pokemon.id);
+
+	return (
+		<tr
+			tabIndex={0}
+			role="link"
+			onClick={() => onOpenPokemon(pokemon.key)}
+			onKeyDown={(event) => {
+				if (event.key === "Enter" || event.key === " ") {
+					event.preventDefault();
+					onOpenPokemon(pokemon.key);
+				}
+			}}
+			className="cursor-pointer transition-colors hover:bg-[rgba(79,184,178,0.08)] focus-visible:outline-2 focus-visible:outline-[var(--lagoon-deep)] focus-visible:outline-offset-[-2px]"
+		>
+			<td className="border-t border-[var(--line)] px-3 py-2.5 font-semibold tabular-nums text-[var(--sea-ink-soft)]">
+				{formattedId ?? "—"}
+			</td>
+			<td className="border-t border-[var(--line)] px-3 py-2.5">
+				<div className="flex items-center gap-2.5">
+					<PokemonSprite
+						pokemon={pokemon}
+						size={56}
+						className="h-14 w-14 flex-shrink-0 object-contain"
+					/>
+					<div className="min-w-0">
+						<p className="m-0 truncate text-sm font-semibold text-[var(--sea-ink)]">
+							{pokemon.displayName}
+						</p>
+					</div>
+				</div>
+			</td>
+			<td className="border-t border-[var(--line)] px-3 py-2.5">
+				<div className="flex flex-wrap gap-1.5">
+					{rowTypes.length > 0 ? (
+						rowTypes.map((type) => {
+							const color = getTypeColor(type);
+							return (
+								<span
+									key={`${pokemon.key}-${type}`}
+									className="rounded-full border px-2 py-1 text-[10px] font-bold tracking-[0.08em] text-[var(--sea-ink)] uppercase"
+									style={{
+										backgroundColor: color.bg,
+										borderColor: color.border,
+									}}
+								>
+									{type}
+								</span>
+							);
+						})
+					) : (
+						<span className="text-xs text-[var(--sea-ink-soft)]">Unknown</span>
+					)}
+				</div>
+			</td>
+			<td className="border-t border-[var(--line)] px-3 py-2.5 font-bold tabular-nums text-[var(--sea-ink)]">
+				{pokemon.total}
+			</td>
+			{LIST_STAT_COLUMNS.map((statKey) => {
+				const value = pokemon.baseStats[statKey] ?? EMPTY_STATS[statKey];
+				return (
+					<td
+						key={`list-stat-${pokemon.key}-${statKey}`}
+						className="border-t border-[var(--line)] px-3 py-2.5 font-semibold tabular-nums text-[var(--sea-ink)]"
+					>
+						{value}
+					</td>
+				);
+			})}
+		</tr>
+	);
+});
+
+function getNumericSortValue(
+	pokemon: PokemonRecord,
+	column: Exclude<PokemonListSortColumn, "id" | "pokemon">,
+): number {
+	if (column === "bst") {
+		return pokemon.total;
+	}
+
+	return pokemon.baseStats[column];
+}
 
 export function PokemonListTable({
 	filteredPokemon,
 	pokemonRecordsCount,
-	pokemonTypes,
 }: PokemonListTableProps) {
-	const openPokemonInNewTab = (pokemonKey: string) => {
+	const [isSortPending, startSortTransition] = useTransition();
+	const [sort, setSort] = useState<PokemonListSort>({
+		column: "id",
+		direction: "asc",
+	});
+
+	const nameCollator = useMemo(
+		() => new Intl.Collator(undefined, { sensitivity: "base" }),
+		[],
+	);
+
+	const openPokemonInNewTab = useCallback((pokemonKey: string) => {
 		if (typeof window === "undefined") {
 			return;
 		}
 
 		const encodedPokemonKey = encodeURIComponent(pokemonKey.toLowerCase());
 		window.open(`/pokemon/${encodedPokemonKey}`, "_blank", "noopener,noreferrer");
+	}, []);
+
+	const sortedPokemon = useMemo(() => {
+		const sortable = [...filteredPokemon];
+
+		sortable.sort((left, right) => {
+			const leftHasId = typeof left.id === "number";
+			const rightHasId = typeof right.id === "number";
+
+			if (sort.column === "id") {
+				if (leftHasId !== rightHasId) {
+					return leftHasId ? -1 : 1;
+				}
+
+				if (leftHasId && rightHasId) {
+					const idDelta = (left.id as number) - (right.id as number);
+					if (idDelta !== 0) {
+						return sort.direction === "asc" ? idDelta : -idDelta;
+					}
+				}
+
+				return nameCollator.compare(left.displayName, right.displayName);
+			}
+
+			if (sort.column === "pokemon") {
+				const nameDelta = nameCollator.compare(left.displayName, right.displayName);
+				if (nameDelta !== 0) {
+					return sort.direction === "asc" ? nameDelta : -nameDelta;
+				}
+
+				if (leftHasId && rightHasId) {
+					return (left.id as number) - (right.id as number);
+				}
+
+				if (leftHasId !== rightHasId) {
+					return leftHasId ? -1 : 1;
+				}
+
+				return nameCollator.compare(left.key, right.key);
+			}
+
+			const leftValue = getNumericSortValue(left, sort.column);
+			const rightValue = getNumericSortValue(right, sort.column);
+			const valueDelta = leftValue - rightValue;
+			if (valueDelta !== 0) {
+				return sort.direction === "asc" ? valueDelta : -valueDelta;
+			}
+
+			if (leftHasId && rightHasId) {
+				const idDelta = (left.id as number) - (right.id as number);
+				if (idDelta !== 0) {
+					return idDelta;
+				}
+			}
+
+			if (leftHasId !== rightHasId) {
+				return leftHasId ? -1 : 1;
+			}
+
+			return nameCollator.compare(left.displayName, right.displayName);
+		});
+
+		return sortable;
+	}, [filteredPokemon, nameCollator, sort]);
+
+	const getSortIndicator = (column: PokemonListSortColumn) =>
+		sort.column === column ? (sort.direction === "asc" ? "↑" : "↓") : "↕";
+
+	const applySort = (
+		column: PokemonListSortColumn,
+		defaultDirection: "asc" | "desc",
+	) => {
+		startSortTransition(() => {
+			setSort((current) => {
+				if (current.column === column) {
+					return {
+						column,
+						direction: current.direction === "asc" ? "desc" : "asc",
+					};
+				}
+
+				return { column, direction: defaultDirection };
+			});
+		});
 	};
 
 	return (
@@ -157,139 +361,83 @@ export function PokemonListTable({
 			<p className="text-xs font-semibold tracking-[0.12em] text-[var(--sea-ink-soft)] uppercase">
 				{filteredPokemon.length} shown / {pokemonRecordsCount} total
 			</p>
+			{isSortPending ? (
+				<p className="mt-1 text-[11px] font-semibold text-[var(--sea-ink-soft)]">
+					Sorting...
+				</p>
+			) : null}
 
 			<div className="mt-3 overflow-auto rounded-xl border border-[var(--line)]">
-				<table className="w-full min-w-[960px] border-collapse text-sm">
+				<table className="w-full min-w-[1180px] border-collapse text-sm">
 					<thead className="sticky top-0 bg-[color-mix(in_oklab,var(--surface-strong)_86%,white_14%)]">
 						<tr>
 							<th className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
-								Pokemon
+								<button
+									type="button"
+									onClick={() => applySort("id", "desc")}
+									className="inline-flex items-center gap-1 text-inherit"
+									title="Sort by ID"
+								>
+									ID
+									<span aria-hidden="true">{getSortIndicator("id")}</span>
+								</button>
+							</th>
+							<th className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
+								<button
+									type="button"
+									onClick={() => applySort("pokemon", "asc")}
+									className="inline-flex items-center gap-1 text-inherit"
+									title="Sort by Pokemon name"
+								>
+									Pokemon
+									<span aria-hidden="true">{getSortIndicator("pokemon")}</span>
+								</button>
 							</th>
 							<th className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
 								Types
 							</th>
 							<th className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
-								BST
+								<button
+									type="button"
+									onClick={() => applySort("bst", "desc")}
+									className="inline-flex items-center gap-1 text-inherit"
+									title="Sort by BST"
+								>
+									BST
+									<span aria-hidden="true">{getSortIndicator("bst")}</span>
+								</button>
 							</th>
-							<th className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
-								Base Stats
-							</th>
-							<th className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
-								Learnset
-							</th>
-							<th className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
-								Evolutions
-							</th>
+							{STAT_ROWS.map((row) => (
+								<th
+									key={`header-${row.key}`}
+									className="px-3 py-2 text-left text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase"
+								>
+									<button
+										type="button"
+										onClick={() => applySort(row.key, "desc")}
+										className="inline-flex items-center gap-1 text-inherit"
+										title={`Sort by ${row.label}`}
+									>
+										{STAT_LIST_LABELS[row.key]}
+										<span aria-hidden="true">{getSortIndicator(row.key)}</span>
+									</button>
+								</th>
+							))}
 						</tr>
 					</thead>
 					<tbody>
-						{filteredPokemon.length > 0 ? (
-							filteredPokemon.map((pokemon) => {
-								const rowTypes = getTypesForPokemon(pokemon, pokemonTypes);
-
-								return (
-									<tr
-										key={`list-row-${pokemon.key}`}
-										tabIndex={0}
-										role="link"
-										onClick={() => openPokemonInNewTab(pokemon.key)}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" || event.key === " ") {
-												event.preventDefault();
-												openPokemonInNewTab(pokemon.key);
-											}
-										}}
-										className="cursor-pointer transition-colors hover:bg-[rgba(79,184,178,0.08)] focus-visible:outline-2 focus-visible:outline-[var(--lagoon-deep)] focus-visible:outline-offset-[-2px]"
-									>
-										<td className="border-t border-[var(--line)] px-3 py-2.5">
-											<div className="flex items-center gap-2.5">
-												<PokemonSprite
-													pokemon={pokemon}
-													size={44}
-													className="h-11 w-11 flex-shrink-0 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.5)] object-contain p-1"
-												/>
-												<div className="min-w-0">
-													<p className="m-0 truncate text-sm font-semibold text-[var(--sea-ink)]">
-														{pokemon.displayName}
-													</p>
-												</div>
-											</div>
-										</td>
-										<td className="border-t border-[var(--line)] px-3 py-2.5">
-											<div className="flex flex-wrap gap-1.5">
-												{rowTypes.length > 0 ? (
-													rowTypes.map((type) => {
-														const color = getTypeColor(type);
-														return (
-															<span
-																key={`${pokemon.key}-${type}`}
-																className="rounded-full border px-2 py-1 text-[10px] font-bold tracking-[0.08em] text-[var(--sea-ink)] uppercase"
-																style={{
-																	backgroundColor: color.bg,
-																	borderColor: color.border,
-																}}
-															>
-																{type}
-															</span>
-														);
-													})
-												) : (
-													<span className="text-xs text-[var(--sea-ink-soft)]">
-														Unknown
-													</span>
-												)}
-											</div>
-										</td>
-										<td className="border-t border-[var(--line)] px-3 py-2.5 font-bold tabular-nums text-[var(--sea-ink)]">
-											{pokemon.total}
-										</td>
-										<td className="border-t border-[var(--line)] px-3 py-2.5">
-											<div className="grid min-w-[360px] grid-cols-3 gap-1.5">
-												{STAT_ROWS.map((row) => {
-													const value =
-														pokemon.baseStats[row.key] ?? EMPTY_STATS[row.key];
-													const width = Math.min(100, (value / STAT_CAP) * 100);
-
-													return (
-														<div
-															key={`list-stat-${pokemon.key}-${row.key}`}
-															className="rounded-lg border border-[var(--line)] bg-transparent px-2 py-1"
-														>
-															<div className="flex items-center justify-between gap-1">
-																<span className="text-[10px] font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
-																	{STAT_LIST_LABELS[row.key]}
-																</span>
-																<span className="text-[10px] font-semibold tabular-nums text-[var(--sea-ink)]">
-																	{value}
-																</span>
-															</div>
-															<div className="mt-1 h-1.5 rounded-full bg-[rgba(17,44,49,0.12)]">
-																<div
-																	className="h-full rounded-full"
-																	style={{
-																		width: `${width}%`,
-																		backgroundImage: getStatBarGradient(value),
-																	}}
-																/>
-															</div>
-														</div>
-													);
-												})}
-											</div>
-										</td>
-										<td className="border-t border-[var(--line)] px-3 py-2.5 text-xs font-semibold tabular-nums text-[var(--sea-ink-soft)]">
-											{pokemon.learnSet.length}
-										</td>
-										<td className="border-t border-[var(--line)] px-3 py-2.5 text-xs font-semibold tabular-nums text-[var(--sea-ink-soft)]">
-											{pokemon.evolutionTable.length}
-										</td>
-									</tr>
-								);
-							})
+						{sortedPokemon.length > 0 ? (
+							sortedPokemon.map((pokemon) => (
+								<PokemonListRow
+									key={`list-row-${pokemon.key}`}
+									onOpenPokemon={openPokemonInNewTab}
+									pokemon={pokemon}
+								/>
+							))
 						) : (
 							<tr>
 								<td
-									colSpan={6}
+									colSpan={10}
 									className="border-t border-[var(--line)] px-3 py-5 text-sm text-[var(--sea-ink-soft)]"
 								>
 									No Pokemon match this search.
@@ -318,18 +466,16 @@ export function NoResultsCard({
 }
 
 type PokemonSummaryCardProps = {
-	hasLoadedTypes: boolean;
 	selectedPokemon: PokemonRecord;
 	selectedPokemonTypes: string[];
-	typeLoadError: string | null;
 };
 
 export function PokemonSummaryCard({
-	hasLoadedTypes,
 	selectedPokemon,
 	selectedPokemonTypes,
-	typeLoadError,
 }: PokemonSummaryCardProps) {
+	const formattedNationalId = formatPokemonId(selectedPokemon.id);
+
 	return (
 		<article className="island-shell rise-in rounded-2xl p-5 sm:p-6">
 			<div className="flex flex-wrap items-start justify-between gap-3">
@@ -338,19 +484,24 @@ export function PokemonSummaryCard({
 						href={`https://pokemondb.net/pokedex/${selectedPokemon.baseSlug}`}
 						target="_blank"
 						rel="noreferrer"
-						className="group inline-flex rounded-2xl border border-[var(--line)] bg-[rgba(255,255,255,0.5)] p-2 transition hover:-translate-y-0.5 hover:border-[rgba(50,143,151,0.45)]"
+						className="group inline-flex rounded-2xl border border-[var(--line)] p-2 transition hover:-translate-y-0.5 hover:border-[rgba(50,143,151,0.45)]"
 						title={`Open ${selectedPokemon.displayName} on PokemonDB`}
 					>
 						<PokemonSprite
 							pokemon={selectedPokemon}
-							size={104}
-							className="h-[104px] w-[104px] rounded-xl object-contain"
+							size={132}
+							className="h-[132px] w-[132px] object-contain"
 						/>
 					</a>
 					<div>
 						<h2 className="display-title m-0 text-3xl font-bold tracking-tight sm:text-4xl">
 							{selectedPokemon.displayName}
 						</h2>
+						<p className="mt-1 mb-0 text-xs font-semibold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
+							{formattedNationalId
+								? `National ID ${formattedNationalId}`
+								: "National ID unavailable"}
+						</p>
 						<div className="mt-2 flex flex-wrap gap-1.5">
 							{selectedPokemonTypes.map((type) => {
 								const color = getTypeColor(type);
@@ -368,24 +519,12 @@ export function PokemonSummaryCard({
 									</span>
 								);
 							})}
-							{hasLoadedTypes &&
-							!typeLoadError &&
-							selectedPokemonTypes.length === 0 ? (
+							{selectedPokemonTypes.length === 0 ? (
 								<span className="rounded-full border border-[var(--line)] bg-[rgba(255,255,255,0.5)] px-2.5 py-1 text-[11px] font-semibold text-[var(--sea-ink-soft)]">
 									Type unknown
 								</span>
 							) : null}
 						</div>
-						{!hasLoadedTypes ? (
-							<p className="mt-1 mb-0 text-xs text-[var(--sea-ink-soft)]">
-								Loading type data from PokemonDB...
-							</p>
-						) : null}
-            {typeLoadError ? (
-              <p className="mt-1 mb-0 text-xs text-amber-700 dark:text-amber-300">
-                Type data unavailable: {typeLoadError}
-              </p>
-            ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <Link
                 to="/pokemon/$pokemonKey"
@@ -572,19 +711,15 @@ export function EvolutionPathCard({
 }
 
 type TypeDefensesCardProps = {
-	hasLoadedTypes: boolean;
 	selectedDefensiveMultipliers: DefenseMultiplierMap | null;
 	selectedPokemonName: string;
 	selectedPokemonTypes: string[];
-	typeLoadError: string | null;
 };
 
 export function TypeDefensesCard({
-	hasLoadedTypes,
 	selectedDefensiveMultipliers,
 	selectedPokemonName,
 	selectedPokemonTypes,
-	typeLoadError,
 }: TypeDefensesCardProps) {
 	return (
 		<section className="rounded-2xl border border-[var(--line)] bg-[var(--bg-base)] p-4 sm:p-5">
@@ -645,11 +780,7 @@ export function TypeDefensesCard({
 				</div>
 			) : (
 				<p className="mt-3 mb-0 rounded-xl border border-[var(--line)] bg-[rgba(255,255,255,0.45)] px-3 py-3 text-sm text-[var(--sea-ink-soft)]">
-					{!hasLoadedTypes
-						? "Loading type matchup data from PokemonDB..."
-						: typeLoadError
-							? "Type matchup card unavailable until type data loads."
-							: "Type matchup card unavailable for this Pokemon."}
+					Type matchup card unavailable for this Pokemon.
 				</p>
 			)}
 		</section>

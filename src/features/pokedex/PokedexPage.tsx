@@ -1,5 +1,4 @@
 import { useEffect, useId, useMemo, useState } from 'react'
-import { getPokemonTypesFromPokemonDb } from './pokemon-types'
 import {
   EggMovesCard,
   ErrorNotice,
@@ -12,17 +11,11 @@ import {
   PokemonSummaryCard,
   TypeDefensesCard,
 } from './PokedexSections'
-import type {
-  EvolutionLink,
-  PokedexPageProps,
-  PokemonDataFile,
-  PokemonRecord,
-  PokemonTypeMap,
-} from './types'
+import type { EvolutionLink, PokedexCatalogFile, PokedexPageProps, PokemonRecord } from './types'
 import {
   computeDefensiveMultiplierMap,
-  getTypesForPokemon,
-  normalizePokemonData,
+  formatPokemonId,
+  normalizePokemonCatalogData,
   toDisplayLabel,
 } from './utils'
 
@@ -47,11 +40,8 @@ export function PokedexPage({
   showListPage,
   initialSelectedKey,
 }: PokedexPageProps) {
-  const [pokemonData, setPokemonData] = useState<PokemonDataFile | null>(null)
+  const [pokemonCatalog, setPokemonCatalog] = useState<PokedexCatalogFile | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  const [pokemonTypes, setPokemonTypes] = useState<PokemonTypeMap>({})
-  const [typeLoadError, setTypeLoadError] = useState<string | null>(null)
-  const [hasLoadedTypes, setHasLoadedTypes] = useState(false)
   const [query, setQuery] = useState('')
   const [selectedKey, setSelectedKey] = useState('')
   const searchInputId = useId()
@@ -59,19 +49,19 @@ export function PokedexPage({
   useEffect(() => {
     let isMounted = true
 
-    async function loadPokemonData() {
+    async function loadPokemonCatalog() {
       try {
-        const response = await fetch('/pokemon_data.json')
+        const response = await fetch('/pokedex_catalog.json')
         if (!response.ok) {
-          throw new Error(`Could not load pokemon_data.json (status ${response.status}).`)
+          throw new Error(`Could not load pokedex_catalog.json (status ${response.status}).`)
         }
 
-        const json = (await response.json()) as PokemonDataFile
+        const json = (await response.json()) as PokedexCatalogFile
         if (!isMounted) {
           return
         }
 
-        setPokemonData(json)
+        setPokemonCatalog(json)
       } catch (error) {
         if (!isMounted) {
           return
@@ -80,48 +70,12 @@ export function PokedexPage({
         const message =
           error instanceof Error
             ? error.message
-            : 'Unknown error loading pokemon_data.json.'
+            : 'Unknown error loading pokedex_catalog.json.'
         setLoadError(message)
       }
     }
 
-    void loadPokemonData()
-
-    return () => {
-      isMounted = false
-    }
-  }, [])
-
-  useEffect(() => {
-    let isMounted = true
-
-    async function loadPokemonTypes() {
-      try {
-        const typeMap = await getPokemonTypesFromPokemonDb()
-        if (!isMounted) {
-          return
-        }
-
-        setPokemonTypes(typeMap)
-        setTypeLoadError(null)
-      } catch (error) {
-        if (!isMounted) {
-          return
-        }
-
-        const message =
-          error instanceof Error
-            ? error.message
-            : 'Unknown error loading Pokemon type data.'
-        setTypeLoadError(message)
-      } finally {
-        if (isMounted) {
-          setHasLoadedTypes(true)
-        }
-      }
-    }
-
-    void loadPokemonTypes()
+    void loadPokemonCatalog()
 
     return () => {
       isMounted = false
@@ -129,8 +83,8 @@ export function PokedexPage({
   }, [])
 
   const pokemonRecords = useMemo(
-    () => (pokemonData ? normalizePokemonData(pokemonData) : []),
-    [pokemonData],
+    () => (pokemonCatalog ? normalizePokemonCatalogData(pokemonCatalog) : []),
+    [pokemonCatalog],
   )
 
   useEffect(() => {
@@ -148,7 +102,8 @@ export function PokedexPage({
     return pokemonRecords.filter((pokemon) => {
       const display = pokemon.displayName.toLowerCase()
       const key = pokemon.key.toLowerCase()
-      return display.includes(cleaned) || key.includes(cleaned)
+      const id = (formatPokemonId(pokemon.id) ?? '').toLowerCase()
+      return display.includes(cleaned) || key.includes(cleaned) || id.includes(cleaned)
     })
   }, [pokemonRecords, query])
 
@@ -225,8 +180,8 @@ export function PokedexPage({
       return []
     }
 
-    return getTypesForPokemon(selectedPokemon, pokemonTypes)
-  }, [pokemonTypes, selectedPokemon])
+    return selectedPokemon.types
+  }, [selectedPokemon])
 
   const selectedDefensiveMultipliers = useMemo(
     () => computeDefensiveMultiplierMap(selectedPokemonTypes),
@@ -293,13 +248,12 @@ export function PokedexPage({
         />
 
         {loadError ? <ErrorNotice message={loadError} /> : null}
-        {!pokemonData && !loadError ? <LoadingNotice /> : null}
+        {!pokemonCatalog && !loadError ? <LoadingNotice /> : null}
 
-        {pokemonData ? (
+        {pokemonCatalog ? (
           <PokemonListTable
             filteredPokemon={filteredPokemon}
             pokemonRecordsCount={pokemonRecords.length}
-            pokemonTypes={pokemonTypes}
           />
         ) : null}
       </main>
@@ -319,17 +273,15 @@ export function PokedexPage({
       />
 
       {loadError ? <ErrorNotice message={loadError} /> : null}
-      {!pokemonData && !loadError ? <LoadingNotice /> : null}
+      {!pokemonCatalog && !loadError ? <LoadingNotice /> : null}
 
-      {pokemonData ? (
+      {pokemonCatalog ? (
         <section className="mt-7 space-y-5">
           {selectedPokemon ? (
             <>
               <PokemonSummaryCard
-                hasLoadedTypes={hasLoadedTypes}
                 selectedPokemon={selectedPokemon}
                 selectedPokemonTypes={selectedPokemonTypes}
-                typeLoadError={typeLoadError}
               />
 
               <article className="grid gap-5 lg:grid-cols-2">
@@ -339,11 +291,9 @@ export function PokedexPage({
                   onJumpToPokemon={jumpToPokemon}
                 />
                 <TypeDefensesCard
-                  hasLoadedTypes={hasLoadedTypes}
                   selectedDefensiveMultipliers={selectedDefensiveMultipliers}
                   selectedPokemonName={selectedPokemon.displayName}
                   selectedPokemonTypes={selectedPokemonTypes}
-                  typeLoadError={typeLoadError}
                 />
               </article>
 

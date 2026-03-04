@@ -1,29 +1,18 @@
 import {
   DEFAULT_TYPE_COLOR,
-  SPRITE_PATHS,
   STAT_CAP,
   TYPE_CHART,
   TYPE_COLORS,
   TYPE_ORDER,
 } from './constants'
 import type {
-  BaseStats,
   DefenseMultiplierMap,
   DefenseTone,
-  PokemonDataFile,
+  PokedexCatalogFile,
   PokemonRecord,
-  PokemonTypeMap,
   PokemonTypeName,
   TypeColor,
 } from './types'
-
-function numberOrZero(value: unknown): number {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.max(0, Math.round(value))
-  }
-
-  return 0
-}
 
 export function toDisplayLabel(value: string): string {
   return value
@@ -34,78 +23,14 @@ export function toDisplayLabel(value: string): string {
     .join(' ')
 }
 
-function keyToSlug(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9_]/g, '')
-    .replaceAll('_', '-')
-}
-
-function getBaseSpeciesKey(key: string, keySet: Set<string>): string {
-  const parts = key.split('_')
-
-  for (let index = parts.length - 1; index >= 1; index -= 1) {
-    const candidate = parts.slice(0, index).join('_')
-    if (keySet.has(candidate)) {
-      return candidate
-    }
+export function formatPokemonId(id: number | null | undefined): string | null {
+  if (typeof id !== 'number' || !Number.isFinite(id) || id < 0) {
+    return null
   }
 
-  return key
+  return Math.trunc(id).toString().padStart(3, '0')
 }
 
-export function parsePokemonTypesFromHtml(html: string): PokemonTypeMap {
-  const typeMap: PokemonTypeMap = {}
-  const rowPattern = /<tr>([\s\S]*?)<\/tr>/g
-  
-  while (true) {
-    const rowMatch = rowPattern.exec(html)
-    if (!rowMatch) {
-      break
-    }
-
-    const rowHtml = rowMatch[1]
-    const slugMatch = rowHtml.match(
-      /<a[^>]+class="ent-name"[^>]+href="\/pokedex\/([^"#?]+)"/i,
-    )
-
-    if (!slugMatch?.[1]) {
-      continue
-    }
-
-    const slug = slugMatch[1].trim().toLowerCase()
-    const types = Array.from(
-      rowHtml.matchAll(/<a[^>]+class="type-icon[^"]*"[^>]*>([^<]+)<\/a>/gi),
-    )
-      .map((match) => match[1].trim().toLowerCase())
-      .filter(
-        (type, index, array) => type.length > 0 && array.indexOf(type) === index,
-      )
-
-    if (types.length > 0) {
-      typeMap[slug] = types
-    }
-  }
-
-  return typeMap
-}
-
-export function getTypesForPokemon(
-  pokemon: Pick<PokemonRecord, 'spriteSlug' | 'baseSlug'>,
-  typeMap: PokemonTypeMap,
-): string[] {
-  const formTypes = typeMap[pokemon.spriteSlug]
-  if (Array.isArray(formTypes) && formTypes.length > 0) {
-    return formTypes
-  }
-
-  const baseTypes = typeMap[pokemon.baseSlug]
-  if (Array.isArray(baseTypes) && baseTypes.length > 0) {
-    return baseTypes
-  }
-
-  return []
-}
 
 export function getTypeColor(type: string): TypeColor {
   return TYPE_COLORS[type] ?? DEFAULT_TYPE_COLOR
@@ -384,88 +309,23 @@ export function getStatBarGradient(value: number): string {
   return `linear-gradient(90deg, hsl(${hue} 82% 34%), hsl(${hue} 90% 56%))`
 }
 
-export function normalizePokemonData(data: PokemonDataFile): PokemonRecord[] {
-  const keySet = new Set(Object.keys(data))
+export function normalizePokemonCatalogData(
+  data: PokedexCatalogFile,
+): PokemonRecord[] {
+  return Object.values(data.pokemon)
+    .filter((pokemon) => pokemon.id !== 0 && pokemon.key !== 'MISSINGNO')
+    .sort((a, b) => {
+    const aHasId = typeof a.id === 'number'
+    const bHasId = typeof b.id === 'number'
 
-  return Object.entries(data)
-    .map(([key, raw]) => {
-      const baseKey = getBaseSpeciesKey(key, keySet)
-
-      const baseStats: BaseStats = {
-        hp: numberOrZero(raw.base_stats?.hp),
-        attack: numberOrZero(raw.base_stats?.attack),
-        defense: numberOrZero(raw.base_stats?.defense),
-        sp_attack: numberOrZero(raw.base_stats?.sp_attack),
-        sp_defense: numberOrZero(raw.base_stats?.sp_defense),
-        speed: numberOrZero(raw.base_stats?.speed),
-      }
-
-      const total = Object.values(baseStats).reduce((sum, stat) => sum + stat, 0)
-
-      const learnSet = Array.isArray(raw.learn_set)
-        ? raw.learn_set
-            .map((move) => ({
-              level: numberOrZero(move.level),
-              move: typeof move.move === 'string' ? move.move : '',
-            }))
-            .filter((move) => move.move.length > 0)
-            .sort((a, b) => a.level - b.level || a.move.localeCompare(b.move))
-        : []
-
-      const eggMoves = Array.isArray(raw.egg_moves)
-        ? raw.egg_moves
-            .filter((move): move is string => typeof move === 'string')
-            .sort((a, b) => a.localeCompare(b))
-        : []
-
-      const evolutionTable = Array.isArray(raw.evolution_table)
-        ? raw.evolution_table
-            .map((step) => ({
-              method: typeof step.method === 'string' ? step.method : 'UNKNOWN',
-              parameter:
-                typeof step.parameter === 'string' ||
-                typeof step.parameter === 'number' ||
-                typeof step.parameter === 'boolean'
-                  ? step.parameter
-                  : undefined,
-              target: typeof step.target === 'string' ? step.target : '',
-              extra:
-                typeof step.extra === 'string' ||
-                typeof step.extra === 'number' ||
-                typeof step.extra === 'boolean'
-                  ? step.extra
-                  : undefined,
-            }))
-            .filter((step) => step.target.length > 0)
-        : []
-
-      return {
-        key,
-        displayName: toDisplayLabel(key),
-        baseStats,
-        total,
-        learnSet,
-        eggMoves,
-        evolutionTable,
-        spriteSlug: keyToSlug(key),
-        baseSlug: keyToSlug(baseKey),
-      }
-    })
-    .sort((a, b) => a.displayName.localeCompare(b.displayName))
-}
-
-export function buildSpriteSources(
-  spriteSlug: string,
-  baseSlug: string,
-): string[] {
-  const slugs = [...new Set([spriteSlug, baseSlug])]
-  const sources: string[] = []
-
-  for (const path of SPRITE_PATHS) {
-    for (const slug of slugs) {
-      sources.push(`https://img.pokemondb.net/sprites/${path}/${slug}.png`)
+    if (aHasId !== bHasId) {
+      return aHasId ? -1 : 1
     }
-  }
 
-  return sources
+    if (aHasId && bHasId && a.id !== b.id) {
+      return (a.id as number) - (b.id as number)
+    }
+
+      return a.displayName.localeCompare(b.displayName)
+    })
 }

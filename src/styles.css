@@ -162,6 +162,12 @@ pre code {
   font-family: "Fraunces", Georgia, serif;
 }
 
+.pixel-art {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  -ms-interpolation-mode: nearest-neighbor;
+}
+
 .island-shell {
   border: 1px solid var(--line);
   background: linear-gradient(165deg, var(--surface-strong), var(--surface));

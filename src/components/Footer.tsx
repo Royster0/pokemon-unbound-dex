@@ -7,7 +7,7 @@ export default function Footer() {
         <p className="m-0 text-sm">
           &copy; {year} Unbound Pokedex.
         </p>
-        <p className="island-kicker m-0">Local lookup from pokemon_data.json</p>
+        <p className="island-kicker m-0">Local lookup from pokedex_catalog.json</p>
       </div>
     </footer>
   )

@@ -10,6 +10,10 @@
     "build": "vite build",
     "preview": "node .output/server/index.mjs",
     "start": "node .output/server/index.mjs",
+    "data:scrape-ids": "node scripts/scrape-unbound-pokedex-ids.mjs",
+    "data:build": "node scripts/build-unified-json.mjs",
+    "data:validate": "node scripts/validate-unified-json.mjs",
+    "data:refresh": "npm run data:build && npm run data:validate",
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check"

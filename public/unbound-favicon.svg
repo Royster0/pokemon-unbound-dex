@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Unbound Pokedex favicon">
+  <defs>
+    <linearGradient id="bg" x1="8" y1="6" x2="56" y2="58" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#10343a" />
+      <stop offset="1" stop-color="#4fb8b2" />
+    </linearGradient>
+    <linearGradient id="top" x1="16" y1="16" x2="48" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#72e5db" />
+      <stop offset="1" stop-color="#3c93b0" />
+    </linearGradient>
+    <clipPath id="ball-clip">
+      <circle cx="32" cy="34" r="18" />
+    </clipPath>
+  </defs>
+
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bg)" />
+
+  <g>
+    <circle cx="32" cy="34" r="18" fill="#f3faf6" stroke="#0f2f35" stroke-width="3" />
+    <g clip-path="url(#ball-clip)">
+      <rect x="14" y="16" width="36" height="18" fill="url(#top)" />
+      <rect x="14" y="34" width="36" height="18" fill="#edf8f2" />
+    </g>
+    <line x1="14" y1="34" x2="50" y2="34" stroke="#0f2f35" stroke-width="3" />
+    <circle cx="32" cy="34" r="6.8" fill="#ffffff" stroke="#0f2f35" stroke-width="3" />
+    <circle cx="32" cy="34" r="2.7" fill="#4fb8b2" />
+  </g>
+
+  <circle cx="46.5" cy="18" r="2" fill="#ffffff" opacity="0.9" />
+</svg>

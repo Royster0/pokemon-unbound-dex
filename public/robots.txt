@@ -1,0 +1,7 @@
+# Unbound Pokedex crawler policy
+User-agent: *
+Allow: /
+
+# Internal framework/runtime paths (not useful in search results)
+Disallow: /_server/
+Disallow: /_vinxi/

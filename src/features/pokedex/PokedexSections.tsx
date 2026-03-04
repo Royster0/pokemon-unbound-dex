@@ -1,5 +1,5 @@
-import { memo, useCallback, useMemo, useState, useTransition } from "react";
 import { Link } from "@tanstack/react-router";
+import { memo, useMemo, useState, useTransition } from "react";
 import {
 	EMPTY_STATS,
 	STAT_CAP,
@@ -17,8 +17,8 @@ import type {
 } from "./types";
 import {
 	describeEvolutionRequirement,
-	formatPokemonId,
 	formatMultiplier,
+	formatPokemonId,
 	getDefenseMultiplierTone,
 	getDefensiveMatchupLabel,
 	getStatBarGradient,
@@ -157,83 +157,156 @@ const LIST_STAT_COLUMNS: StatKey[] = [
 ];
 
 type PokemonListRowProps = {
-	onOpenPokemon: (pokemonKey: string) => void;
 	pokemon: PokemonRecord;
 };
 
 const PokemonListRow = memo(function PokemonListRow({
-	onOpenPokemon,
 	pokemon,
 }: PokemonListRowProps) {
 	const rowTypes = pokemon.types;
 	const formattedId = formatPokemonId(pokemon.id);
+	const pokemonHref = `/pokemon/${encodeURIComponent(pokemon.key.toLowerCase())}`;
+	const abilityEntries = [
+		{
+			isHidden: false,
+			value: pokemon.abilities?.primary,
+		},
+		{
+			isHidden: false,
+			value: pokemon.abilities?.secondary,
+		},
+		{
+			isHidden: true,
+			value: pokemon.abilities?.hidden,
+		},
+	].filter(
+		(
+			entry,
+		): entry is {
+			isHidden: boolean;
+			value: string;
+		} => typeof entry.value === "string" && entry.value.length > 0,
+	);
 
 	return (
-		<tr
-			tabIndex={0}
-			role="link"
-			onClick={() => onOpenPokemon(pokemon.key)}
-			onKeyDown={(event) => {
-				if (event.key === "Enter" || event.key === " ") {
-					event.preventDefault();
-					onOpenPokemon(pokemon.key);
-				}
-			}}
-			className="cursor-pointer transition-colors hover:bg-[rgba(79,184,178,0.08)] focus-visible:outline-2 focus-visible:outline-[var(--lagoon-deep)] focus-visible:outline-offset-[-2px]"
-		>
-			<td className="w-[58px] border-t border-[var(--line)] px-2 py-2 text-center text-xs font-semibold tabular-nums text-[var(--sea-ink-soft)]">
-				{formattedId ?? "—"}
+		<tr className="cursor-pointer transition-colors hover:bg-[rgba(79,184,178,0.08)]">
+			<td className="w-[58px] border-t border-[var(--line)]">
+				<a
+					href={pokemonHref}
+					target="_blank"
+					rel="noreferrer"
+					className="flex h-full w-full items-center justify-center px-2 py-2 text-center text-xs font-semibold tabular-nums text-[var(--sea-ink-soft)] no-underline"
+				>
+					{formattedId ?? "—"}
+				</a>
 			</td>
-			<td className="border-t border-[var(--line)] px-2 py-2">
-				<div className="flex items-center gap-2.5">
-					<PokemonSprite
-						pokemon={pokemon}
-						size={56}
-						className="h-14 w-14 flex-shrink-0 object-contain"
-					/>
-					<div className="min-w-0">
-						<p className="m-0 truncate text-[13px] font-semibold text-[var(--sea-ink)]">
-							{pokemon.displayName}
-						</p>
+			<td className="border-t border-[var(--line)]">
+				<a
+					href={pokemonHref}
+					target="_blank"
+					rel="noreferrer"
+					className="block h-full w-full px-2 py-2 text-inherit no-underline"
+				>
+					<div className="flex items-center gap-2.5">
+						<PokemonSprite
+							pokemon={pokemon}
+							size={56}
+							className="h-14 w-14 flex-shrink-0 object-contain"
+						/>
+						<div className="min-w-0">
+							<p className="m-0 truncate text-[13px] font-semibold text-[var(--sea-ink)]">
+								{pokemon.displayName}
+							</p>
+						</div>
 					</div>
-				</div>
+				</a>
 			</td>
-			<td className="w-[96px] border-t border-[var(--line)] px-2 py-2">
-				<div className="inline-flex min-w-full flex-col gap-1">
-					{rowTypes.length > 0 ? (
-						rowTypes.map((type) => {
-							const color = getTypeColor(type);
-							return (
+			<td className="w-[96px] border-t border-[var(--line)]">
+				<a
+					href={pokemonHref}
+					target="_blank"
+					rel="noreferrer"
+					className="block h-full w-full px-2 py-2 text-inherit no-underline"
+				>
+					<div className="inline-flex min-w-full flex-col gap-1">
+						{rowTypes.length > 0 ? (
+							rowTypes.map((type) => {
+								const color = getTypeColor(type);
+								return (
+									<span
+										key={`${pokemon.key}-${type}`}
+										className="inline-flex justify-center rounded-md border px-1.5 py-0.5 text-[9px] font-extrabold leading-none tracking-[0.06em] text-[var(--sea-ink)] uppercase"
+										style={{
+											backgroundColor: color.bg,
+											borderColor: color.border,
+										}}
+									>
+										{type}
+									</span>
+								);
+							})
+						) : (
+							<span className="text-center text-[11px] text-[var(--sea-ink-soft)]">
+								Unknown
+							</span>
+						)}
+					</div>
+				</a>
+			</td>
+			<td className="w-[176px] border-t border-[var(--line)]">
+				<a
+					href={pokemonHref}
+					target="_blank"
+					rel="noreferrer"
+					className="block h-full w-full px-2 py-2 text-inherit no-underline"
+				>
+					<div className="inline-flex min-w-full flex-col gap-1">
+						{abilityEntries.length > 0 ? (
+							abilityEntries.map((ability, index) => (
 								<span
-									key={`${pokemon.key}-${type}`}
-									className="inline-flex justify-center rounded-md border px-1.5 py-0.5 text-[9px] font-extrabold leading-none tracking-[0.06em] text-[var(--sea-ink)] uppercase"
-									style={{
-										backgroundColor: color.bg,
-										borderColor: color.border,
-									}}
+									key={`${pokemon.key}-ability-${ability.value}-${index}`}
+									className={`inline-flex justify-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none tracking-[0.04em] ${
+										ability.isHidden
+											? "border-[color-mix(in_oklab,var(--lagoon-deep)_28%,var(--line)_72%)] bg-[color-mix(in_oklab,var(--lagoon-deep)_18%,var(--surface-strong)_82%)] text-[var(--lagoon-deep)]"
+											: "border-[var(--chip-line)] bg-[var(--chip-bg)] text-[var(--sea-ink)]"
+									}`}
 								>
-									{type}
+									{toDisplayLabel(ability.value)}
 								</span>
-							);
-						})
-					) : (
-						<span className="text-center text-[11px] text-[var(--sea-ink-soft)]">
-							Unknown
-						</span>
-					)}
-				</div>
+							))
+						) : (
+							<span className="text-center text-[11px] text-[var(--sea-ink-soft)]">
+								Unknown
+							</span>
+						)}
+					</div>
+				</a>
 			</td>
-			<td className="w-[64px] border-t border-[var(--line)] px-2 py-2 text-center text-xs font-bold tabular-nums text-[var(--sea-ink)]">
-				{pokemon.total}
+			<td className="w-[64px] border-t border-[var(--line)]">
+				<a
+					href={pokemonHref}
+					target="_blank"
+					rel="noreferrer"
+					className="flex h-full w-full items-center justify-center px-2 py-2 text-center text-xs font-bold tabular-nums text-[var(--sea-ink)] no-underline"
+				>
+					{pokemon.total}
+				</a>
 			</td>
 			{LIST_STAT_COLUMNS.map((statKey) => {
 				const value = pokemon.baseStats[statKey] ?? EMPTY_STATS[statKey];
 				return (
 					<td
 						key={`list-stat-${pokemon.key}-${statKey}`}
-						className="w-[56px] border-t border-[var(--line)] px-1.5 py-2 text-center text-xs font-semibold tabular-nums text-[var(--sea-ink)]"
+						className="w-[56px] border-t border-[var(--line)]"
 					>
-						{value}
+						<a
+							href={pokemonHref}
+							target="_blank"
+							rel="noreferrer"
+							className="flex h-full w-full items-center justify-center px-1.5 py-2 text-center text-xs font-semibold tabular-nums text-[var(--sea-ink)] no-underline"
+						>
+							{value}
+						</a>
 					</td>
 				);
 			})}
@@ -267,15 +340,6 @@ export function PokemonListTable({
 		[],
 	);
 
-	const openPokemonInNewTab = useCallback((pokemonKey: string) => {
-		if (typeof window === "undefined") {
-			return;
-		}
-
-		const encodedPokemonKey = encodeURIComponent(pokemonKey.toLowerCase());
-		window.open(`/pokemon/${encodedPokemonKey}`, "_blank", "noopener,noreferrer");
-	}, []);
-
 	const sortedPokemon = useMemo(() => {
 		const sortable = [...filteredPokemon];
 
@@ -299,7 +363,10 @@ export function PokemonListTable({
 			}
 
 			if (sort.column === "pokemon") {
-				const nameDelta = nameCollator.compare(left.displayName, right.displayName);
+				const nameDelta = nameCollator.compare(
+					left.displayName,
+					right.displayName,
+				);
 				if (nameDelta !== 0) {
 					return sort.direction === "asc" ? nameDelta : -nameDelta;
 				}
@@ -400,6 +467,9 @@ export function PokemonListTable({
 							<th className="w-[96px] px-2 py-2 text-center text-[11px] font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
 								Types
 							</th>
+							<th className="w-[176px] px-2 py-2 text-center text-[11px] font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
+								Abilities
+							</th>
 							<th className="w-[64px] px-2 py-2 text-center text-[11px] font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
 								<button
 									type="button"
@@ -432,16 +502,12 @@ export function PokemonListTable({
 					<tbody>
 						{sortedPokemon.length > 0 ? (
 							sortedPokemon.map((pokemon) => (
-								<PokemonListRow
-									key={`list-row-${pokemon.key}`}
-									onOpenPokemon={openPokemonInNewTab}
-									pokemon={pokemon}
-								/>
+								<PokemonListRow key={`list-row-${pokemon.key}`} pokemon={pokemon} />
 							))
 						) : (
 							<tr>
 								<td
-									colSpan={10}
+									colSpan={11}
 									className="border-t border-[var(--line)] px-3 py-5 text-sm text-[var(--sea-ink-soft)]"
 								>
 									No Pokemon match this search.
@@ -572,28 +638,27 @@ export function PokemonSummaryCard({
 								))}
 							</div>
 						</div>
-            <div className="mt-2 flex flex-wrap items-center gap-3">
-              <Link
-                to="/pokemon/$pokemonKey"
-                params={{ pokemonKey: selectedPokemon.key.toLowerCase() }}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-semibold no-underline"
-              >
-                Open in new tab
-              </Link>
-              <a
-                href={`https://pokemondb.net/pokedex/${selectedPokemon.baseSlug}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-xs font-semibold"
-              >
-                View on PokemonDB
-              </a>
-            </div>
-          </div>
-        </div>
-
+						<div className="mt-2 flex flex-wrap items-center gap-3">
+							<Link
+								to="/pokemon/$pokemonKey"
+								params={{ pokemonKey: selectedPokemon.key.toLowerCase() }}
+								target="_blank"
+								rel="noreferrer"
+								className="text-xs font-semibold no-underline"
+							>
+								Open in new tab
+							</Link>
+							<a
+								href={`https://pokemondb.net/pokedex/${selectedPokemon.baseSlug}`}
+								target="_blank"
+								rel="noreferrer"
+								className="text-xs font-semibold"
+							>
+								View on PokemonDB
+							</a>
+						</div>
+					</div>
+				</div>
 			</div>
 
 			<div className="mt-6 space-y-3">
@@ -678,7 +743,9 @@ export function InfoCard({ pokemon }: InfoCardProps) {
 					<span className="text-xs font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
 						Egg Group
 					</span>
-					<span className="font-semibold text-[var(--sea-ink)]">{eggGroupLabel}</span>
+					<span className="font-semibold text-[var(--sea-ink)]">
+						{eggGroupLabel}
+					</span>
 				</div>
 				<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-2 text-sm">
 					<span className="text-xs font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
@@ -694,13 +761,17 @@ export function InfoCard({ pokemon }: InfoCardProps) {
 					<span className="text-xs font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
 						Growth
 					</span>
-					<span className="font-semibold text-[var(--sea-ink)]">{growthRate}</span>
+					<span className="font-semibold text-[var(--sea-ink)]">
+						{growthRate}
+					</span>
 				</div>
 				<div className="grid grid-cols-[96px_minmax(0,1fr)] gap-2 text-sm">
 					<span className="text-xs font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
 						Catch Rate
 					</span>
-					<span className="font-semibold text-[var(--sea-ink)]">{catchRate}</span>
+					<span className="font-semibold text-[var(--sea-ink)]">
+						{catchRate}
+					</span>
 				</div>
 			</div>
 		</section>
@@ -718,7 +789,9 @@ type EvolutionPathCardProps = {
 const FORM_ONLY_EVOLUTION_METHODS = new Set(["MEGA", "GIGANTAMAX"]);
 const MAX_EVOLUTION_PATH_COUNT = 999;
 
-function getPokemonRecordIdSortValue(record: PokemonRecord | undefined): number {
+function getPokemonRecordIdSortValue(
+	record: PokemonRecord | undefined,
+): number {
 	if (!record || typeof record.id !== "number") {
 		return Number.POSITIVE_INFINITY;
 	}
@@ -745,7 +818,9 @@ function compareEvolutionLinks(
 		return leftMethodPenalty - rightMethodPenalty;
 	}
 
-	const leftSourceId = getPokemonRecordIdSortValue(recordByKey.get(left.sourceKey));
+	const leftSourceId = getPokemonRecordIdSortValue(
+		recordByKey.get(left.sourceKey),
+	);
 	const rightSourceId = getPokemonRecordIdSortValue(
 		recordByKey.get(right.sourceKey),
 	);
@@ -753,7 +828,9 @@ function compareEvolutionLinks(
 		return leftSourceId - rightSourceId;
 	}
 
-	const leftTargetId = getPokemonRecordIdSortValue(recordByKey.get(left.targetKey));
+	const leftTargetId = getPokemonRecordIdSortValue(
+		recordByKey.get(left.targetKey),
+	);
 	const rightTargetId = getPokemonRecordIdSortValue(
 		recordByKey.get(right.targetKey),
 	);
@@ -941,8 +1018,8 @@ export function EvolutionPathCard({
 
 		const outgoingBranchesBySource = new Map<string, EvolutionBranch[]>();
 		for (const sourceKey of componentKeys) {
-			const sourceLinks = (outgoingBySource.get(sourceKey) ?? []).filter((link) =>
-				componentKeys.has(link.targetKey),
+			const sourceLinks = (outgoingBySource.get(sourceKey) ?? []).filter(
+				(link) => componentKeys.has(link.targetKey),
 			);
 			if (sourceLinks.length === 0) {
 				continue;
@@ -1076,10 +1153,7 @@ export function EvolutionPathCard({
 		);
 	}
 
-	function renderEvolutionArrow(
-		branch: EvolutionBranch,
-		keySuffix: string,
-	) {
+	function renderEvolutionArrow(branch: EvolutionBranch, keySuffix: string) {
 		const requirementLines = getEvolutionRequirementLines(branch.links);
 
 		return (
@@ -1123,8 +1197,9 @@ export function EvolutionPathCard({
 			return null;
 		}
 
-		const branches = (evolutionLayout.outgoingBranchesBySource.get(sourceKey) ?? [])
-			.filter((branch) => !visitedKeys.has(branch.targetKey));
+		const branches = (
+			evolutionLayout.outgoingBranchesBySource.get(sourceKey) ?? []
+		).filter((branch) => !visitedKeys.has(branch.targetKey));
 
 		if (branches.length === 0) {
 			return renderPokemonCard(sourcePokemon, `${keySuffix}-leaf`);

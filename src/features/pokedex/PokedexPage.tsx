@@ -23,7 +23,10 @@ import {
   computeDefensiveMultiplierMap,
   getTypesForPokemon,
   normalizePokemonData,
+  toDisplayLabel,
 } from './utils'
+
+const DEFAULT_TAB_TITLE = 'Unbound Pokedex'
 
 function findPokemonByRouteKey(
   routeKey: string,
@@ -194,6 +197,28 @@ export function PokedexPage({
       filteredPokemon[0]
     )
   }, [filteredPokemon, selectedKey])
+
+  useEffect(() => {
+    if (showListPage) {
+      document.title = DEFAULT_TAB_TITLE
+      return
+    }
+
+    if (selectedPokemon) {
+      document.title = `${selectedPokemon.displayName} | ${DEFAULT_TAB_TITLE}`
+      return
+    }
+
+    if (initialSelectedKey) {
+      const fallbackName = toDisplayLabel(
+        decodeURIComponent(initialSelectedKey).trim().replaceAll('-', '_'),
+      )
+      document.title = `${fallbackName} | ${DEFAULT_TAB_TITLE}`
+      return
+    }
+
+    document.title = DEFAULT_TAB_TITLE
+  }, [initialSelectedKey, selectedPokemon, showListPage])
 
   const selectedPokemonTypes = useMemo(() => {
     if (!selectedPokemon) {

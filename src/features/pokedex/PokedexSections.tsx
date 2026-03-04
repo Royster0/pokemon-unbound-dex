@@ -1121,9 +1121,11 @@ export function EvolutionPathCard({
 			nextVisitedKeys.add(onlyBranch.targetKey);
 
 			return (
-				<div className={`flex items-center ${compact ? "gap-1.5" : "gap-3"}`}>
-					{renderPokemonCard(sourcePokemon, `${keySuffix}-single`)}
-					{renderEvolutionArrow(onlyBranch, `${keySuffix}-single`)}
+				<div className={`flex items-start ${compact ? "gap-1.5" : "gap-3"}`}>
+					<div className={`flex items-center ${compact ? "gap-1.5" : "gap-3"}`}>
+						{renderPokemonCard(sourcePokemon, `${keySuffix}-single`)}
+						{renderEvolutionArrow(onlyBranch, `${keySuffix}-single`)}
+					</div>
 					{renderEvolutionNode(
 						onlyBranch.targetKey,
 						nextVisitedKeys,

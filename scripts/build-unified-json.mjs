@@ -5,8 +5,6 @@ import path from 'node:path'
 import process from 'node:process'
 import { fileURLToPath } from 'node:url'
 
-const TYPE_SOURCE_URL = 'https://pokemondb.net/pokedex/all'
-const FETCH_TIMEOUT_MS = 30_000
 const FRONTSPR_RAW_BASE_URL =
   'https://raw.githubusercontent.com/Skeli789/Dynamic-Pokemon-Expansion/refs/heads/Unbound/graphics/frontspr'
 const POKEMON_DB_SPRITE_PATHS = [
@@ -31,11 +29,11 @@ const repoRoot = path.resolve(__dirname, '..')
 const DEFAULT_INPUT = path.join(repoRoot, 'public', 'pokemon_data.json')
 const DEFAULT_OUTPUT = path.join(repoRoot, 'public', 'pokedex_catalog.json')
 const DEFAULT_IDS_INPUT = path.join(repoRoot, 'public', 'pokemon_ids.json')
-const DEFAULT_TYPES_CACHE = path.join(
+const DEFAULT_BASE_STATS_SOURCE = path.join(
   repoRoot,
   'scripts',
-  '.cache',
-  'pokemon-types.json',
+  'sources',
+  'Base_Stats.c',
 )
 
 function printHelp() {
@@ -49,9 +47,11 @@ Options:
   --input <path>        Base data JSON path (default: public/pokemon_data.json)
   --output <path>       Unified output path (default: public/pokedex_catalog.json)
   --ids-input <path>    Pokemon ID JSON path (default: public/pokemon_ids.json)
-  --types-cache <path>  Type map cache file path (default: scripts/.cache/pokemon-types.json)
-  --offline             Skip live fetch; load types from cache only
-  --no-cache-write      Do not update type cache after successful live fetch
+  --base-stats-source <path>
+                        Base stats C source path (default: scripts/sources/Base_Stats.c)
+  --types-cache <path>  (deprecated; ignored)
+  --offline             (deprecated; ignored)
+  --no-cache-write      (deprecated; ignored)
   --help                Show this message
 `.trim())
 }
@@ -68,7 +68,8 @@ function parseArgs(argv) {
     input: DEFAULT_INPUT,
     output: DEFAULT_OUTPUT,
     idsInput: DEFAULT_IDS_INPUT,
-    typesCache: DEFAULT_TYPES_CACHE,
+    baseStatsSource: DEFAULT_BASE_STATS_SOURCE,
+    typesCache: null,
     offline: false,
     writeCache: true,
   }
@@ -92,8 +93,13 @@ function parseArgs(argv) {
         index += 1
         break
       }
+      case '--base-stats-source': {
+        options.baseStatsSource = toAbsolutePath(argv[index + 1])
+        index += 1
+        break
+      }
       case '--types-cache': {
-        options.typesCache = toAbsolutePath(argv[index + 1])
+        options.typesCache = argv[index + 1] ? toAbsolutePath(argv[index + 1]) : null
         index += 1
         break
       }
@@ -244,65 +250,6 @@ function buildSpriteSources({ id, key, baseKey, spriteSlug, baseSlug }) {
   return [...new Set(sources)]
 }
 
-function parsePokemonTypesFromHtml(html) {
-  const typeMap = {}
-  const rowPattern = /<tr>([\s\S]*?)<\/tr>/g
-
-  while (true) {
-    const rowMatch = rowPattern.exec(html)
-    if (!rowMatch) {
-      break
-    }
-
-    const rowHtml = rowMatch[1]
-    const slugMatch = rowHtml.match(
-      /<a[^>]+class="ent-name"[^>]+href="\/pokedex\/([^"#?]+)"/i,
-    )
-
-    if (!slugMatch?.[1]) {
-      continue
-    }
-
-    const slug = slugMatch[1].trim().toLowerCase()
-    const types = Array.from(
-      rowHtml.matchAll(/<a[^>]+class="type-icon[^"]*"[^>]*>([^<]+)<\/a>/gi),
-    )
-      .map((match) => match[1].trim().toLowerCase())
-      .filter((type, index, list) => type.length > 0 && list.indexOf(type) === index)
-
-    if (types.length > 0) {
-      typeMap[slug] = types
-    }
-  }
-
-  return typeMap
-}
-
-function normalizeTypeMap(rawMap) {
-  const normalized = {}
-
-  if (!isRecord(rawMap)) {
-    return normalized
-  }
-
-  for (const [slug, value] of Object.entries(rawMap)) {
-    if (!Array.isArray(value)) {
-      continue
-    }
-
-    const types = value
-      .filter((item) => typeof item === 'string')
-      .map((type) => type.trim().toLowerCase())
-      .filter((type, index, list) => type.length > 0 && list.indexOf(type) === index)
-
-    if (types.length > 0) {
-      normalized[slug.toLowerCase()] = types
-    }
-  }
-
-  return normalized
-}
-
 function normalizePokemonIdMap(rawIdsPayload) {
   const candidateMap =
     isRecord(rawIdsPayload) && isRecord(rawIdsPayload.idsByKey)
@@ -331,119 +278,138 @@ function normalizePokemonIdMap(rawIdsPayload) {
   return normalized
 }
 
-async function readTypeMapCache(cachePath) {
-  const parsed = await readJsonFile(cachePath)
-
-  if (isRecord(parsed) && isRecord(parsed.typeMap)) {
-    return {
-      typeMap: normalizeTypeMap(parsed.typeMap),
-      fetchedAt:
-        typeof parsed.fetchedAt === 'string' && parsed.fetchedAt.length > 0
-          ? parsed.fetchedAt
-          : null,
-      source: 'cache-payload',
-    }
+function normalizePrefixedConstant(value, prefix) {
+  if (typeof value !== 'string') {
+    return null
   }
+
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return null
+  }
+
+  const expectedPrefix = `${prefix}_`
+  if (!trimmed.startsWith(expectedPrefix)) {
+    return trimmed.toLowerCase()
+  }
+
+  const suffix = trimmed.slice(expectedPrefix.length)
+  if (suffix === 'NONE') {
+    return null
+  }
+
+  return suffix.toLowerCase()
+}
+
+function parseIntegerConstant(value) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (trimmed.length === 0) {
+    return null
+  }
+
+  const radix = /^0x/i.test(trimmed) ? 16 : 10
+  const parsed = Number.parseInt(trimmed, radix)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function normalizeSpeciesDetails(rawFields) {
+  const type1 = normalizePrefixedConstant(rawFields.type1, 'TYPE')
+  const type2 = normalizePrefixedConstant(rawFields.type2, 'TYPE')
+  const types = [type1, type2].filter(
+    (value, index, list) =>
+      typeof value === 'string' && value.length > 0 && list.indexOf(value) === index,
+  )
+
+  const eggGroup1 = normalizePrefixedConstant(rawFields.eggGroup1, 'EGG_GROUP')
+  const eggGroup2 = normalizePrefixedConstant(rawFields.eggGroup2, 'EGG_GROUP')
+  const eggGroups = [eggGroup1, eggGroup2].filter(
+    (value, index, list) =>
+      typeof value === 'string' && value.length > 0 && list.indexOf(value) === index,
+  )
 
   return {
-    typeMap: normalizeTypeMap(parsed),
-    fetchedAt: null,
-    source: 'cache-raw',
+    types,
+    abilities: {
+      primary: normalizePrefixedConstant(rawFields.ability1, 'ABILITY'),
+      secondary: normalizePrefixedConstant(rawFields.ability2, 'ABILITY'),
+      hidden: normalizePrefixedConstant(rawFields.hiddenAbility, 'ABILITY'),
+    },
+    eggGroups,
+    heldItems: {
+      common: normalizePrefixedConstant(rawFields.item1, 'ITEM'),
+      rare: normalizePrefixedConstant(rawFields.item2, 'ITEM'),
+    },
+    growthRate: normalizePrefixedConstant(rawFields.growthRate, 'GROWTH'),
+    catchRate: parseIntegerConstant(rawFields.catchRate),
   }
 }
 
-async function fetchTypeMapFromPokemonDb() {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+function parseSpeciesDetailsFromBaseStatsContent(content) {
+  const speciesDetailsByKey = {}
+  const speciesStartPattern = /^\s*\[SPECIES_([A-Z0-9_]+)\]\s*=\s*$/
+  const assignmentPattern = /^\s*\.(\w+)\s*=\s*([^,]+),/
+  const blockEndPattern = /^\s*},/
 
-  try {
-    const response = await fetch(TYPE_SOURCE_URL, {
-      signal: controller.signal,
-      headers: {
-        'user-agent': 'unbound-wiki-data-build/1.0',
-      },
-    })
+  let activeSpeciesKey = null
+  let activeFields = null
 
-    if (!response.ok) {
-      throw new Error(`PokemonDB request failed with status ${response.status}.`)
-    }
-
-    const html = await response.text()
-    const typeMap = parsePokemonTypesFromHtml(html)
-    if (Object.keys(typeMap).length === 0) {
-      throw new Error('PokemonDB type parsing produced no records.')
-    }
-
-    return typeMap
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-async function loadPokemonTypeMap(options) {
-  if (options.offline) {
-    const cached = await readTypeMapCache(options.typesCache)
-    if (Object.keys(cached.typeMap).length === 0) {
-      throw new Error(
-        `Offline mode enabled, but cache at "${options.typesCache}" has no usable type records.`,
-      )
-    }
-
-    return {
-      typeMap: cached.typeMap,
-      mode: 'cache',
-      fetchedAt: cached.fetchedAt,
-    }
-  }
-
-  try {
-    const typeMap = await fetchTypeMapFromPokemonDb()
-    const fetchedAt = new Date().toISOString()
-
-    if (options.writeCache) {
-      await writeJsonFile(options.typesCache, {
-        schemaVersion: 1,
-        sourceUrl: TYPE_SOURCE_URL,
-        fetchedAt,
-        typeMap,
-      })
-    }
-
-    return {
-      typeMap,
-      mode: 'live',
-      fetchedAt,
-    }
-  } catch (error) {
-    try {
-      const cached = await readTypeMapCache(options.typesCache)
-      if (Object.keys(cached.typeMap).length === 0) {
-        throw error
+  const lines = String(content).split(/\r?\n/)
+  for (const line of lines) {
+    if (activeSpeciesKey === null) {
+      const speciesStartMatch = line.match(speciesStartPattern)
+      if (speciesStartMatch) {
+        activeSpeciesKey = speciesStartMatch[1]
+        activeFields = {}
       }
+      continue
+    }
 
-      console.warn(
-        `Live type fetch failed (${error instanceof Error ? error.message : String(error)}). Falling back to cache at "${options.typesCache}".`,
-      )
-      return {
-        typeMap: cached.typeMap,
-        mode: 'cache',
-        fetchedAt: cached.fetchedAt,
-      }
-    } catch {
-      throw error
+    if (blockEndPattern.test(line)) {
+      speciesDetailsByKey[activeSpeciesKey] = normalizeSpeciesDetails(activeFields)
+      activeSpeciesKey = null
+      activeFields = null
+      continue
+    }
+
+    const assignmentMatch = line.match(assignmentPattern)
+    if (assignmentMatch && activeFields) {
+      const fieldName = assignmentMatch[1]
+      const fieldValue = assignmentMatch[2].trim()
+      activeFields[fieldName] = fieldValue
     }
   }
+
+  return speciesDetailsByKey
 }
 
-function normalizePokemonData(rawData, typeMap, idMap) {
+async function loadSpeciesDetailsFromBaseStats(baseStatsSourcePath) {
+  const sourceContent = await readFile(baseStatsSourcePath, 'utf8')
+  const speciesDetailsByKey = parseSpeciesDetailsFromBaseStatsContent(sourceContent)
+
+  if (Object.keys(speciesDetailsByKey).length === 0) {
+    throw new Error(
+      `No species details were parsed from base stats source "${baseStatsSourcePath}".`,
+    )
+  }
+
+  return speciesDetailsByKey
+}
+
+function normalizePokemonData(rawData, speciesDetailsByKey, idMap) {
   const keySet = new Set(Object.keys(rawData))
   const normalizedPokemon = {}
 
   let withTypes = 0
   let withoutTypes = 0
-  let baseTypeFallbacks = 0
+  let typeFallbacksToBaseSpecies = 0
   let withIds = 0
   let withoutIds = 0
+  let withSpeciesDetails = 0
+  let withoutSpeciesDetails = 0
 
   const sortedEntries = Object.entries(rawData).sort(([left], [right]) =>
     left.localeCompare(right),
@@ -455,17 +421,23 @@ function normalizePokemonData(rawData, typeMap, idMap) {
     const spriteSlug = keyToSlug(key)
     const baseSlug = keyToSlug(baseKey)
 
-    const formTypes = typeMap[spriteSlug]
-    const baseTypes = typeMap[baseSlug]
-    const types =
-      Array.isArray(formTypes) && formTypes.length > 0
-        ? formTypes
-        : Array.isArray(baseTypes) && baseTypes.length > 0
-          ? baseTypes
-          : []
+    const formDetails = isRecord(speciesDetailsByKey[key]) ? speciesDetailsByKey[key] : null
+    const baseDetails =
+      isRecord(speciesDetailsByKey[baseKey]) ? speciesDetailsByKey[baseKey] : null
 
-    if ((!Array.isArray(formTypes) || formTypes.length === 0) && types.length > 0) {
-      baseTypeFallbacks += 1
+    const formTypes = Array.isArray(formDetails?.types) ? formDetails.types : []
+    const baseTypes = Array.isArray(baseDetails?.types) ? baseDetails.types : []
+    const types =
+      formTypes.length > 0 ? formTypes : baseTypes.length > 0 ? baseTypes : []
+
+    if (formTypes.length === 0 && types.length > 0) {
+      typeFallbacksToBaseSpecies += 1
+    }
+
+    if (formDetails || baseDetails) {
+      withSpeciesDetails += 1
+    } else {
+      withoutSpeciesDetails += 1
     }
 
     if (types.length > 0) {
@@ -480,6 +452,48 @@ function normalizePokemonData(rawData, typeMap, idMap) {
     } else {
       withIds += 1
     }
+
+    const selectedDetails = formDetails ?? baseDetails
+    const abilities = {
+      primary:
+        selectedDetails && isRecord(selectedDetails.abilities)
+          ? selectedDetails.abilities.primary ?? null
+          : null,
+      secondary:
+        selectedDetails && isRecord(selectedDetails.abilities)
+          ? selectedDetails.abilities.secondary ?? null
+          : null,
+      hidden:
+        selectedDetails && isRecord(selectedDetails.abilities)
+          ? selectedDetails.abilities.hidden ?? null
+          : null,
+    }
+
+    const eggGroups =
+      selectedDetails && Array.isArray(selectedDetails.eggGroups)
+        ? selectedDetails.eggGroups.filter((group) => typeof group === 'string')
+        : []
+
+    const heldItems = {
+      common:
+        selectedDetails && isRecord(selectedDetails.heldItems)
+          ? selectedDetails.heldItems.common ?? null
+          : null,
+      rare:
+        selectedDetails && isRecord(selectedDetails.heldItems)
+          ? selectedDetails.heldItems.rare ?? null
+          : null,
+    }
+
+    const growthRate =
+      selectedDetails && typeof selectedDetails.growthRate === 'string'
+        ? selectedDetails.growthRate
+        : null
+
+    const catchRate =
+      selectedDetails && typeof selectedDetails.catchRate === 'number'
+        ? selectedDetails.catchRate
+        : null
 
     const safeBaseStats = isRecord(safeRaw.base_stats) ? safeRaw.base_stats : {}
     const baseStats = {
@@ -548,6 +562,11 @@ function normalizePokemonData(rawData, typeMap, idMap) {
       eggMoves,
       evolutionTable,
       types,
+      abilities,
+      eggGroups,
+      heldItems,
+      growthRate,
+      catchRate,
       spriteSources: buildSpriteSources({
         id,
         key,
@@ -564,9 +583,12 @@ function normalizePokemonData(rawData, typeMap, idMap) {
       totalPokemon: sortedEntries.length,
       withTypes,
       withoutTypes,
-      baseTypeFallbacks,
+      baseTypeFallbacks: typeFallbacksToBaseSpecies,
+      typeFallbacksToBaseSpecies,
       withIds,
       withoutIds,
+      withSpeciesDetails,
+      withoutSpeciesDetails,
     },
   }
 }
@@ -582,20 +604,20 @@ async function main() {
   const rawPokemonIds = await readJsonFile(options.idsInput)
   const pokemonIdMap = normalizePokemonIdMap(rawPokemonIds)
 
-  const typeLoad = await loadPokemonTypeMap(options)
-  const normalized = normalizePokemonData(baseData, typeLoad.typeMap, pokemonIdMap)
+  const speciesDetailsByKey = await loadSpeciesDetailsFromBaseStats(options.baseStatsSource)
+  const normalized = normalizePokemonData(baseData, speciesDetailsByKey, pokemonIdMap)
   const generatedAt = new Date().toISOString()
 
   const unifiedCatalog = {
     meta: {
-      schemaVersion: 1,
+      schemaVersion: 2,
       generatedAt,
       sources: {
         baseDataPath: path.relative(repoRoot, options.input).replaceAll('\\', '/'),
         pokemonIdsPath: path.relative(repoRoot, options.idsInput).replaceAll('\\', '/'),
-        typeSourceUrl: TYPE_SOURCE_URL,
-        typeLoadMode: typeLoad.mode,
-        typeDataFetchedAt: typeLoad.fetchedAt,
+        baseStatsSourcePath: path
+          .relative(repoRoot, options.baseStatsSource)
+          .replaceAll('\\', '/'),
         spritePrimarySourceUrl: FRONTSPR_RAW_BASE_URL,
         pokemonDbSpriteFallbackPaths: POKEMON_DB_SPRITE_PATHS,
       },
@@ -609,12 +631,14 @@ async function main() {
   const relativeOutput = path.relative(repoRoot, options.output).replaceAll('\\', '/')
   console.log(`Wrote unified catalog to ${relativeOutput}`)
   console.log(
-    `Pokemon: ${normalized.counts.totalPokemon}, with types: ${normalized.counts.withTypes}, without types: ${normalized.counts.withoutTypes}, base fallback types: ${normalized.counts.baseTypeFallbacks}`,
+    `Pokemon: ${normalized.counts.totalPokemon}, with types: ${normalized.counts.withTypes}, without types: ${normalized.counts.withoutTypes}, base fallback types: ${normalized.counts.typeFallbacksToBaseSpecies}`,
   )
   console.log(
     `Pokemon IDs: with id: ${normalized.counts.withIds}, without id: ${normalized.counts.withoutIds}`,
   )
-  console.log(`Type source mode: ${typeLoad.mode}`)
+  console.log(
+    `Species details: with source data: ${normalized.counts.withSpeciesDetails}, without source data: ${normalized.counts.withoutSpeciesDetails}`,
+  )
 }
 
 main().catch((error) => {

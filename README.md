@@ -1,6 +1,6 @@
 # Unbound Pokedex
 
-A TanStack Start app for browsing and searching Pokemon data sourced from Pokemon Unbound `.c` files and PokemonDB.
+A TanStack Start app for browsing and searching Pokemon data sourced from Pokemon Unbound `.c` files.
 
 ## Development
 
@@ -25,7 +25,7 @@ Build a single-source catalog JSON:
 npm run data:build
 ```
 
-`data:build` now reads `public/pokemon_ids.json` and includes `id` per Pokemon in `public/pokedex_catalog.json`.
+`data:build` reads `public/pokemon_ids.json` and `scripts/sources/Base_Stats.c` to include IDs, types, abilities, egg groups, held items, growth rate, and catch rate in `public/pokedex_catalog.json`.
 
 Validate catalog shape and consistency:
 

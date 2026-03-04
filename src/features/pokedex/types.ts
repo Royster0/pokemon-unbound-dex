@@ -28,6 +28,17 @@ export type EvolutionLink = {
   extra?: string | number | boolean
 }
 
+export type PokemonAbilities = {
+  primary: string | null
+  secondary: string | null
+  hidden: string | null
+}
+
+export type PokemonHeldItems = {
+  common: string | null
+  rare: string | null
+}
+
 export type PokemonRecord = {
   key: string
   id: number | null
@@ -39,6 +50,11 @@ export type PokemonRecord = {
   eggMoves: string[]
   evolutionTable: EvolutionStep[]
   types: string[]
+  abilities: PokemonAbilities
+  eggGroups: string[]
+  heldItems: PokemonHeldItems
+  growthRate: string | null
+  catchRate: number | null
   spriteSources: string[]
   spriteSlug: string
   baseSlug: string

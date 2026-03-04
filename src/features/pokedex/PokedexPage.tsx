@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import {
   EggMovesCard,
   ErrorNotice,
-  EvolutionPathCard,
+  InfoCard,
   LearnSetCard,
   LoadingNotice,
   NoResultsCard,
@@ -11,7 +11,7 @@ import {
   PokemonSummaryCard,
   TypeDefensesCard,
 } from './PokedexSections'
-import type { EvolutionLink, PokedexCatalogFile, PokedexPageProps, PokemonRecord } from './types'
+import type { PokedexCatalogFile, PokedexPageProps, PokemonRecord } from './types'
 import {
   computeDefensiveMultiplierMap,
   formatPokemonId,
@@ -188,42 +188,6 @@ export function PokedexPage({
     [selectedPokemonTypes],
   )
 
-  const evolutionFromLinks = useMemo(() => {
-    if (!selectedPokemon) {
-      return []
-    }
-
-    return pokemonRecords.flatMap((pokemon) =>
-      pokemon.evolutionTable
-        .filter((entry) => entry.target === selectedPokemon.key)
-        .map(
-          (entry): EvolutionLink => ({
-            sourceKey: pokemon.key,
-            targetKey: selectedPokemon.key,
-            method: entry.method,
-            parameter: entry.parameter,
-            extra: entry.extra,
-          }),
-        ),
-    )
-  }, [pokemonRecords, selectedPokemon])
-
-  const evolutionToLinks = useMemo(() => {
-    if (!selectedPokemon) {
-      return []
-    }
-
-    return selectedPokemon.evolutionTable.map(
-      (entry): EvolutionLink => ({
-        sourceKey: selectedPokemon.key,
-        targetKey: entry.target,
-        method: entry.method,
-        parameter: entry.parameter,
-        extra: entry.extra,
-      }),
-    )
-  }, [selectedPokemon])
-
   function jumpToPokemon(key: string) {
     setSelectedKey(key)
     if (query.trim().length > 0) {
@@ -282,22 +246,18 @@ export function PokedexPage({
               <PokemonSummaryCard
                 selectedPokemon={selectedPokemon}
                 selectedPokemonTypes={selectedPokemonTypes}
+                pokemonRecords={pokemonRecords}
+                onJumpToPokemon={jumpToPokemon}
               />
 
-              <article className="grid gap-5 lg:grid-cols-2">
-                <EvolutionPathCard
-                  evolutionFromLinks={evolutionFromLinks}
-                  evolutionToLinks={evolutionToLinks}
-                  onJumpToPokemon={jumpToPokemon}
-                />
-                <TypeDefensesCard
-                  selectedDefensiveMultipliers={selectedDefensiveMultipliers}
-                  selectedPokemonName={selectedPokemon.displayName}
-                  selectedPokemonTypes={selectedPokemonTypes}
-                />
-              </article>
+              <TypeDefensesCard
+                selectedDefensiveMultipliers={selectedDefensiveMultipliers}
+                selectedPokemonName={selectedPokemon.displayName}
+                selectedPokemonTypes={selectedPokemonTypes}
+              />
 
-              <article className="grid gap-5 lg:grid-cols-2">
+              <article className="grid gap-5 lg:grid-cols-3">
+                <InfoCard pokemon={selectedPokemon} />
                 <LearnSetCard pokemon={selectedPokemon} />
                 <EggMovesCard pokemon={selectedPokemon} />
               </article>

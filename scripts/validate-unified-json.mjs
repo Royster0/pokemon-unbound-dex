@@ -15,6 +15,7 @@ const STAT_KEYS = [
 ]
 
 const TYPE_NAME_PATTERN = /^[a-z]+$/
+const TOKEN_PATTERN = /^[a-z0-9_]+$/
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 const __filename = fileURLToPath(import.meta.url)
@@ -319,6 +320,108 @@ function validateCatalog(catalog, options) {
           pushWarning(typePath, `duplicate type "${type}"`)
         }
         seen.add(normalized)
+      }
+    }
+
+    if (!isRecord(record.abilities)) {
+      pushError(`${basePath}.abilities`, 'must be an object')
+    } else {
+      for (const abilityField of ['primary', 'secondary', 'hidden']) {
+        const abilityValue = record.abilities[abilityField]
+        const abilityPath = `${basePath}.abilities.${abilityField}`
+        if (
+          abilityValue !== null &&
+          (typeof abilityValue !== 'string' || abilityValue.trim().length === 0)
+        ) {
+          pushError(abilityPath, 'must be a non-empty string or null')
+        } else if (
+          typeof abilityValue === 'string' &&
+          !TOKEN_PATTERN.test(abilityValue.toLowerCase())
+        ) {
+          pushWarning(abilityPath, `unexpected ability format "${abilityValue}"`)
+        }
+      }
+    }
+
+    if (!Array.isArray(record.eggGroups)) {
+      pushError(`${basePath}.eggGroups`, 'must be an array')
+    } else {
+      if (record.eggGroups.length > 2) {
+        pushWarning(`${basePath}.eggGroups`, 'contains more than 2 egg groups')
+      }
+
+      const seenEggGroups = new Set()
+      for (let index = 0; index < record.eggGroups.length; index += 1) {
+        const eggGroup = record.eggGroups[index]
+        const eggGroupPath = `${basePath}.eggGroups[${index}]`
+
+        if (typeof eggGroup !== 'string' || eggGroup.trim().length === 0) {
+          pushError(eggGroupPath, 'must be a non-empty string')
+          continue
+        }
+
+        const normalizedEggGroup = eggGroup.trim().toLowerCase()
+        if (!TOKEN_PATTERN.test(normalizedEggGroup)) {
+          pushWarning(eggGroupPath, `unexpected egg group format "${eggGroup}"`)
+        }
+        if (seenEggGroups.has(normalizedEggGroup)) {
+          pushWarning(eggGroupPath, `duplicate egg group "${eggGroup}"`)
+        }
+        seenEggGroups.add(normalizedEggGroup)
+      }
+    }
+
+    if (!isRecord(record.heldItems)) {
+      pushError(`${basePath}.heldItems`, 'must be an object')
+    } else {
+      for (const itemField of ['common', 'rare']) {
+        const itemValue = record.heldItems[itemField]
+        const itemPath = `${basePath}.heldItems.${itemField}`
+        if (
+          itemValue !== null &&
+          (typeof itemValue !== 'string' || itemValue.trim().length === 0)
+        ) {
+          pushError(itemPath, 'must be a non-empty string or null')
+        } else if (
+          typeof itemValue === 'string' &&
+          !TOKEN_PATTERN.test(itemValue.toLowerCase())
+        ) {
+          pushWarning(itemPath, `unexpected item format "${itemValue}"`)
+        }
+      }
+    }
+
+    if (
+      record.growthRate !== null &&
+      (typeof record.growthRate !== 'string' || record.growthRate.trim().length === 0)
+    ) {
+      pushError(`${basePath}.growthRate`, 'must be a non-empty string or null')
+    } else if (
+      typeof record.growthRate === 'string' &&
+      !TOKEN_PATTERN.test(record.growthRate.toLowerCase())
+    ) {
+      pushWarning(
+        `${basePath}.growthRate`,
+        `unexpected growth rate format "${record.growthRate}"`,
+      )
+    }
+
+    if (record.catchRate === null) {
+      // Catch rate may be intentionally omitted for placeholder/non-catchable entries.
+    } else if (typeof record.catchRate !== 'number' || !Number.isFinite(record.catchRate)) {
+      pushError(`${basePath}.catchRate`, 'must be a finite number or null')
+    } else {
+      if (!Number.isInteger(record.catchRate)) {
+        pushWarning(`${basePath}.catchRate`, 'should be an integer')
+      }
+      if (record.catchRate < 0) {
+        pushError(`${basePath}.catchRate`, 'must be >= 0')
+      }
+      if (record.catchRate > 255) {
+        pushWarning(
+          `${basePath}.catchRate`,
+          `value ${record.catchRate} exceeds standard cap 255`,
+        )
       }
     }
 

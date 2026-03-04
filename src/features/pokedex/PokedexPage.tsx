@@ -16,6 +16,7 @@ import type {
   EvolutionLink,
   PokedexPageProps,
   PokemonDataFile,
+  PokemonRecord,
   PokemonTypeMap,
 } from './types'
 import {
@@ -24,7 +25,25 @@ import {
   normalizePokemonData,
 } from './utils'
 
-export function PokedexPage({ showListPage }: PokedexPageProps) {
+function findPokemonByRouteKey(
+  routeKey: string,
+  pokemonList: PokemonRecord[],
+): PokemonRecord | undefined {
+  const normalized = decodeURIComponent(routeKey).trim().toLowerCase()
+  const normalizedKey = normalized.replaceAll('-', '_')
+
+  return pokemonList.find(
+    (pokemon) =>
+      pokemon.key.toLowerCase() === normalizedKey ||
+      pokemon.spriteSlug === normalized ||
+      pokemon.baseSlug === normalized,
+  )
+}
+
+export function PokedexPage({
+  showListPage,
+  initialSelectedKey,
+}: PokedexPageProps) {
   const [pokemonData, setPokemonData] = useState<PokemonDataFile | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [pokemonTypes, setPokemonTypes] = useState<PokemonTypeMap>({})
@@ -111,6 +130,12 @@ export function PokedexPage({ showListPage }: PokedexPageProps) {
     [pokemonData],
   )
 
+  useEffect(() => {
+    if (initialSelectedKey) {
+      setQuery('')
+    }
+  }, [initialSelectedKey])
+
   const filteredPokemon = useMemo(() => {
     const cleaned = query.trim().toLowerCase()
     if (!cleaned) {
@@ -137,14 +162,27 @@ export function PokedexPage({ showListPage }: PokedexPageProps) {
       return
     }
 
-    const isCurrentSelectionVisible = filteredPokemon.some(
-      (pokemon) => pokemon.key === selectedKey,
-    )
+    setSelectedKey((currentSelectedKey) => {
+      if (
+        currentSelectedKey &&
+        filteredPokemon.some((pokemon) => pokemon.key === currentSelectedKey)
+      ) {
+        return currentSelectedKey
+      }
 
-    if (!isCurrentSelectionVisible) {
-      setSelectedKey(filteredPokemon[0].key)
-    }
-  }, [filteredPokemon, selectedKey])
+      if (initialSelectedKey) {
+        const routeMatchedPokemon =
+          findPokemonByRouteKey(initialSelectedKey, filteredPokemon) ??
+          findPokemonByRouteKey(initialSelectedKey, pokemonRecords)
+
+        if (routeMatchedPokemon) {
+          return routeMatchedPokemon.key
+        }
+      }
+
+      return filteredPokemon[0].key
+    })
+  }, [filteredPokemon, initialSelectedKey, pokemonRecords])
 
   const selectedPokemon = useMemo(() => {
     if (filteredPokemon.length === 0) {

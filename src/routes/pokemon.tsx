@@ -1,10 +1,9 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { PokedexPage } from '../features/pokedex/PokedexPage'
+import { Outlet, createFileRoute } from '@tanstack/react-router'
 
 export const Route = createFileRoute('/pokemon')({
-  component: PokemonListPage,
+  component: PokemonLayout,
 })
 
-function PokemonListPage() {
-  return <PokedexPage showListPage />
+function PokemonLayout() {
+  return <Outlet />
 }

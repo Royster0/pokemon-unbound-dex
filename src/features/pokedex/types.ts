@@ -97,4 +97,5 @@ export type DefenseTone = {
 
 export type PokedexPageProps = {
   showListPage: boolean
+  initialSelectedKey?: string
 }

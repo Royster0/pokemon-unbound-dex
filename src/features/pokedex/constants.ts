@@ -1,6 +1,7 @@
 import type { BaseStats, PokemonTypeName, StatKey, TypeColor } from './types'
 
 export const STAT_CAP = 255
+export const TOTAL_STAT_CAP = 1530
 
 export const EMPTY_STATS: BaseStats = {
   hp: 0,

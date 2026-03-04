@@ -1,6 +1,7 @@
 import {
   DEFAULT_TYPE_COLOR,
   STAT_CAP,
+  TOTAL_STAT_CAP,
   TYPE_CHART,
   TYPE_COLORS,
   TYPE_ORDER,
@@ -295,17 +296,29 @@ export function describeEvolutionRequirement(
   }
 }
 
-function getStatBarHue(value: number): number {
-  const strengthRatio = Math.max(0, Math.min(1, value / STAT_CAP))
-  if (strengthRatio <= 0.5) {
-    return (strengthRatio / 0.5) * 120
+function getBarHueFromRatio(ratio: number): number {
+  const boundedRatio = Math.max(0, Math.min(1, ratio))
+  if (boundedRatio <= 0.5) {
+    return (boundedRatio / 0.5) * 120
   }
 
-  return 120 + ((strengthRatio - 0.5) / 0.5) * 100
+  return 120 + ((boundedRatio - 0.5) / 0.5) * 100
+}
+
+function getStatBarHue(value: number): number {
+  const strengthRatio = Math.max(0, Math.min(1, value / STAT_CAP))
+  return getBarHueFromRatio(strengthRatio)
 }
 
 export function getStatBarGradient(value: number): string {
   const hue = getStatBarHue(value)
+  return `linear-gradient(90deg, hsl(${hue} 82% 34%), hsl(${hue} 90% 56%))`
+}
+
+export function getTotalStatBarGradient(total: number): string {
+  const normalized = Math.max(0, Math.min(1, total / TOTAL_STAT_CAP))
+  const accelerated = Math.pow(normalized, 0.45)
+  const hue = getBarHueFromRatio(accelerated)
   return `linear-gradient(90deg, hsl(${hue} 82% 34%), hsl(${hue} 90% 56%))`
 }
 

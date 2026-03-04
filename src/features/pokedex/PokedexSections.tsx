@@ -5,6 +5,7 @@ import {
 	STAT_CAP,
 	STAT_LIST_LABELS,
 	STAT_ROWS,
+	TOTAL_STAT_CAP,
 	TYPE_DEFENSE_ROWS,
 } from "./constants";
 import { PokemonSprite } from "./PokemonSprite";
@@ -21,6 +22,7 @@ import {
 	getDefenseMultiplierTone,
 	getDefensiveMatchupLabel,
 	getStatBarGradient,
+	getTotalStatBarGradient,
 	getTypeColor,
 	toDisplayLabel,
 } from "./utils";
@@ -501,10 +503,14 @@ export function PokemonSummaryCard({
 			value: formatOptionalToken(selectedPokemon.abilities?.hidden),
 		},
 	];
+	const totalWidth = Math.min(
+		100,
+		Math.max(0, (selectedPokemon.total / TOTAL_STAT_CAP) * 100),
+	);
 
 	return (
 		<article className="island-shell rise-in rounded-2xl p-5 sm:p-6">
-			<div className="flex flex-wrap items-start justify-between gap-3">
+			<div className="flex flex-wrap items-start gap-3">
 				<div className="flex items-start gap-4">
 					<a
 						href={`https://pokemondb.net/pokedex/${selectedPokemon.baseSlug}`}
@@ -588,14 +594,6 @@ export function PokemonSummaryCard({
           </div>
         </div>
 
-				<div className="rounded-2xl border border-[rgba(50,143,151,0.26)] bg-[rgba(79,184,178,0.12)] px-4 py-3 text-right">
-					<p className="m-0 text-xs font-bold tracking-[0.14em] text-[var(--kicker)] uppercase">
-						Total
-					</p>
-					<p className="m-0 text-3xl font-extrabold text-[var(--lagoon-deep)]">
-						{selectedPokemon.total}
-					</p>
-				</div>
 			</div>
 
 			<div className="mt-6 space-y-3">
@@ -627,6 +625,23 @@ export function PokemonSummaryCard({
 						</div>
 					);
 				})}
+				<div className="mt-5 grid grid-cols-[80px_minmax(0,1fr)_72px] items-center gap-3 border-t border-[var(--line)] pt-3">
+					<span className="text-xs font-bold tracking-[0.1em] text-[var(--sea-ink-soft)] uppercase">
+						Total
+					</span>
+					<div className="h-3 rounded-full bg-[rgba(17,44,49,0.13)] p-[2px]">
+						<div
+							className="h-full rounded-full shadow-[0_3px_12px_rgba(0,0,0,0.16)] transition-all duration-500"
+							style={{
+								width: `${totalWidth}%`,
+								backgroundImage: getTotalStatBarGradient(selectedPokemon.total),
+							}}
+						/>
+					</div>
+					<span className="text-right text-sm font-semibold tabular-nums text-[var(--sea-ink)]">
+						{selectedPokemon.total}
+					</span>
+				</div>
 			</div>
 
 			<EvolutionPathCard

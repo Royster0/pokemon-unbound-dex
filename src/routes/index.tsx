@@ -92,6 +92,15 @@ const STAT_ROWS: Array<{ key: StatKey; label: string }> = [
   { key: 'speed', label: 'Speed' },
 ]
 
+const STAT_LIST_LABELS: Record<StatKey, string> = {
+  hp: 'HP',
+  attack: 'Atk',
+  defense: 'Def',
+  sp_attack: 'SpA',
+  sp_defense: 'SpD',
+  speed: 'Spe',
+}
+
 const SPRITE_PATHS = [
   'scarlet-violet/normal',
   'brilliant-diamond-shining-pearl/normal',
@@ -738,8 +747,18 @@ function describeEvolutionRequirement(
   }
 }
 
-function formatBaseStatsOverview(stats: BaseStats): string {
-  return `HP ${stats.hp} · Atk ${stats.attack} · Def ${stats.defense} · SpA ${stats.sp_attack} · SpD ${stats.sp_defense} · Spe ${stats.speed}`
+function getStatBarHue(value: number): number {
+  const strengthRatio = Math.max(0, Math.min(1, value / STAT_CAP))
+  if (strengthRatio <= 0.5) {
+    return (strengthRatio / 0.5) * 120
+  }
+
+  return 120 + ((strengthRatio - 0.5) / 0.5) * 100
+}
+
+function getStatBarGradient(value: number): string {
+  const hue = getStatBarHue(value)
+  return `linear-gradient(90deg, hsl(${hue} 82% 34%), hsl(${hue} 90% 56%))`
 }
 
 const getPokemonTypesFromPokemonDb = createServerFn({ method: 'GET' }).handler(
@@ -1120,7 +1139,7 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
                 id="pokemon-search-input"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by name or key..."
+                placeholder="Search by Pokemon name..."
                 className="w-full rounded-xl border border-[var(--line)] bg-[color-mix(in_oklab,var(--surface-strong)_82%,white_18%)] px-3 py-2.5 text-sm text-[var(--sea-ink)] outline-none transition focus:border-[var(--lagoon-deep)] focus:ring-3 focus:ring-[rgba(79,184,178,0.22)]"
               />
             </div>
@@ -1199,9 +1218,6 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
                                 <p className="m-0 truncate text-sm font-semibold text-[var(--sea-ink)]">
                                   {pokemon.displayName}
                                 </p>
-                                <p className="m-0 truncate text-xs text-[var(--sea-ink-soft)]">
-                                  {pokemon.key}
-                                </p>
                               </div>
                             </div>
                           </td>
@@ -1233,8 +1249,38 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
                           <td className="border-t border-[var(--line)] px-3 py-2.5 font-bold tabular-nums text-[var(--sea-ink)]">
                             {pokemon.total}
                           </td>
-                          <td className="border-t border-[var(--line)] px-3 py-2.5 text-xs text-[var(--sea-ink-soft)]">
-                            {formatBaseStatsOverview(pokemon.baseStats)}
+                          <td className="border-t border-[var(--line)] px-3 py-2.5">
+                            <div className="grid min-w-[360px] grid-cols-3 gap-1.5">
+                              {STAT_ROWS.map((row) => {
+                                const value = pokemon.baseStats[row.key] ?? EMPTY_STATS[row.key]
+                                const width = Math.min(100, (value / STAT_CAP) * 100)
+
+                                return (
+                                  <div
+                                    key={`list-stat-${pokemon.key}-${row.key}`}
+                                    className="rounded-lg border border-[var(--line)] bg-transparent px-2 py-1"
+                                  >
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="text-[10px] font-bold tracking-[0.08em] text-[var(--sea-ink-soft)] uppercase">
+                                        {STAT_LIST_LABELS[row.key]}
+                                      </span>
+                                      <span className="text-[10px] font-semibold tabular-nums text-[var(--sea-ink)]">
+                                        {value}
+                                      </span>
+                                    </div>
+                                    <div className="mt-1 h-1.5 rounded-full bg-[rgba(17,44,49,0.12)]">
+                                      <div
+                                        className="h-full rounded-full"
+                                        style={{
+                                          width: `${width}%`,
+                                          backgroundImage: getStatBarGradient(value),
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </td>
                           <td className="border-t border-[var(--line)] px-3 py-2.5 text-xs font-semibold tabular-nums text-[var(--sea-ink-soft)]">
                             {pokemon.learnSet.length}
@@ -1279,7 +1325,7 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
               id="pokemon-search-input"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search by name or key..."
+              placeholder="Search by Pokemon name..."
               className="w-full rounded-xl border border-[var(--line)] bg-[color-mix(in_oklab,var(--surface-strong)_82%,white_18%)] px-3 py-2.5 text-sm text-[var(--sea-ink)] outline-none transition focus:border-[var(--lagoon-deep)] focus:ring-3 focus:ring-[rgba(79,184,178,0.22)]"
             />
           </div>
@@ -1379,10 +1425,7 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
                           <p className="m-0 truncate text-sm font-semibold text-[var(--sea-ink)]">
                             {pokemon.displayName}
                           </p>
-                          <div className="mt-0.5 flex items-center justify-between gap-3">
-                            <p className="m-0 truncate text-xs font-medium text-[var(--sea-ink-soft)]">
-                              {pokemon.key}
-                            </p>
+                          <div className="mt-1">
                             <span className="rounded-full border border-[var(--chip-line)] bg-[var(--chip-bg)] px-2 py-0.5 text-[11px] font-bold text-[var(--lagoon-deep)]">
                               BST {pokemon.total}
                             </span>
@@ -1424,9 +1467,6 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
                       <h2 className="display-title m-0 text-3xl font-bold tracking-tight sm:text-4xl">
                         {selectedPokemon.displayName}
                       </h2>
-                      <p className="mt-1 mb-0 text-sm font-medium text-[var(--sea-ink-soft)]">
-                        {selectedPokemon.key}
-                      </p>
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {selectedPokemonTypes.map((type) => {
                           const color = getTypeColor(type)
@@ -1487,11 +1527,6 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
                   {STAT_ROWS.map((row) => {
                     const value = selectedPokemon.baseStats[row.key] ?? EMPTY_STATS[row.key]
                     const width = Math.min(100, (value / STAT_CAP) * 100)
-                    const strengthRatio = Math.max(0, Math.min(1, value / STAT_CAP))
-                    const hue =
-                      strengthRatio <= 0.5
-                        ? (strengthRatio / 0.5) * 120
-                        : 120 + ((strengthRatio - 0.5) / 0.5) * 100
 
                     return (
                       <div
@@ -1506,7 +1541,7 @@ export function PokedexPage({ showListPage }: { showListPage: boolean }) {
                             className="h-full rounded-full shadow-[0_3px_12px_rgba(0,0,0,0.16)] transition-all duration-500"
                             style={{
                               width: `${width}%`,
-                              backgroundImage: `linear-gradient(90deg, hsl(${hue} 82% 34%), hsl(${hue} 90% 56%))`,
+                              backgroundImage: getStatBarGradient(value),
                             }}
                           />
                         </div>
